@@ -1,0 +1,2 @@
+# SafeThreadPoolExecutorForThreadLocal
+SafeThreadPoolExecutorForThreadLocal是一个针对ThreadLocal并发安全的线程池
