@@ -288,7 +288,7 @@ public class SafeThreadPoolExecutorForThreadLocal extends ThreadPoolExecutor {
 这样就可以在线程池中共享数据。解决线程池调用无法共享数据的问题。
 
 1. ## 性能对比
-
+### 性能对比_V1
 性能对比代码如下：
 
 ```java
@@ -382,3 +382,136 @@ compareTTL cost:2265
 ```
 
 SafeThreadPoolExecutorForThreadLocal 线程池的性能在ThreadLocal 越多的情况下，性能越高，在ThreadLocal量级为10000的场景下，**性能比阿里的TransmittableThreadLocal快100多倍**，而且随着运行时间的累加，SafeThreadPoolExecutorForThreadLocal性能提升越来越高。
+
+### 性能对比_V2
+
+上述代码Future.get 方式阻塞了任务的推进，降低了系统的吞吐了，无法真实评估SafeThreadPoolExecutorForThreadLocal和TransmittableThreadLocal性能对比，优化了一下对比方案
+
+性能对比代码如下：
+
+```Java
+public static void compareWithThreadPool() throws Exception {
+    ThreadPoolExecutor threadPoolExecutor =
+            new ThreadPoolExecutor(0, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
+    for (int i = 0; i < 10; i++) {
+        System.out.println("-------------" + i + "------------");
+        Future<Object> submit = threadPoolExecutor.submit(() -> {
+            compare();
+            System.out.println(Thread.currentThread().getName());
+            return null;
+        });
+        submit.get();
+    }
+}
+
+public static void compare() throws Exception {
+    for (int j = 0; j < 100; j++) {
+        ThreadLocal<String> context2 = new TransmittableThreadLocal<>();
+        context2.set("ThreadLocal-from-main-inner:" + j);
+    }
+    int rounds = 10000;
+    compareSafe(rounds);
+    compareTTL(rounds);
+}
+
+public static void compareTTL(int rounds) throws Exception {
+    ThreadLocal<String> contextT = new TransmittableThreadLocal<>();
+    ExecutorService executor = Executors.newFixedThreadPool(1);
+    executor = TtlExecutors.getTtlExecutorService(executor);
+    List<Future<String>> objects = new ArrayList<>();
+    long start = System.currentTimeMillis();
+
+    for (int i = 0; i < rounds; i++) {
+        contextT.set("ThreadLocal-from-main:" + i);
+        Future<String> submit = executor.submit(() -> {
+            // System.out.println("context value = " + contextT.get());
+            return contextT.get();
+        });
+        objects.add(submit);
+    }
+    objects.forEach(stringFuture -> {
+        try {
+            stringFuture.get();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+    });
+    long end = System.currentTimeMillis();
+    System.out.println("compareTTL cost:" + (end - start));
+}
+
+public static void compareSafe(int rounds) throws Exception {
+    ThreadLocal<String> context = new ThreadLocal<>();
+    ExecutorService executor = SafeThreadPoolExecutorForThreadLocal.newFixedThreadPool(1);
+    List<Future<String>> objects = new ArrayList<>();
+    long start = System.currentTimeMillis();
+    for (int i = 0; i < rounds; i++) {
+        context.set("ThreadLocal-from-main:" + i);
+        Future<String> submit = executor.submit(() -> {
+            // System.out.println("contextI = " + context.get());
+            return context.get();
+        });
+        objects.add(submit);
+    }
+    objects.forEach(stringFuture -> {
+        try {
+            stringFuture.get();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        }
+    });
+    long end = System.currentTimeMillis();
+    System.out.println("compareSafe cost:" + (end - start));
+}
+```
+
+10次运行对比的运行结果如下：
+
+```sql
+-------------0------------
+compareSafe cost:40
+compareTTL cost:191
+pool-1-thread-1
+-------------1------------
+compareSafe cost:15
+compareTTL cost:113
+pool-1-thread-2
+-------------2------------
+compareSafe cost:7
+compareTTL cost:132
+pool-1-thread-3
+-------------3------------
+compareSafe cost:11
+compareTTL cost:7
+pool-1-thread-4
+-------------4------------
+compareSafe cost:9
+compareTTL cost:71
+pool-1-thread-5
+-------------5------------
+compareSafe cost:7
+compareTTL cost:103
+pool-1-thread-6
+-------------6------------
+compareSafe cost:8
+compareTTL cost:81
+pool-1-thread-7
+-------------7------------
+compareSafe cost:5
+compareTTL cost:82
+pool-1-thread-8
+-------------8------------
+compareSafe cost:5
+compareTTL cost:68
+pool-1-thread-9
+-------------9------------
+compareSafe cost:5
+compareTTL cost:72
+pool-1-thread-10
+```
+
+这次对比在线上最常用的场景，即线程中的ThreadLocal为100个，比较SafeThreadPoolExecutorForThreadLocal和TransmittableThreadLocal的性能，我们发现SafeThreadPoolExecutorForThreadLocal仍然了10倍的领先优势。
