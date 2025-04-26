@@ -92,7 +92,7 @@ context value = ThreadLocal-from-main:9
 cost:26
 ```
 
-而在我们项目中很多脚手架，以及一些优秀的开源框架例如：Spring、MyBatis等，底层使用的都是JDK原生的ThreadLocal，此时无法修改其定义，还是会造成并发安全问题。
+**而在我们项目中很多脚手架，以及一些优秀的开源框架例如：Spring、MyBatis等，底层使用的都是JDK原生的ThreadLocal，此时无法修改其定义，还是会造成并发安全问题。**
 
 其核心思想是封装了自定义的TTLRunable对象，在执行任务之前，先复制当前线程存储在holder中的值，`holder`中的值是在用户set的时候保存进去的，类似于Thread线程级别的map。然后在线程池中线程执行具体任务前，先将当前线程Holder中的数据备份，然后用之前复制的`holder`中的数据替换掉当前线程的Holder数据。执行完再通过备份的数据恢复当前线程的`holder`数据。
 
@@ -283,7 +283,7 @@ public class SafeThreadPoolExecutorForThreadLocal extends ThreadPoolExecutor {
 }
 ```
 
-其核心思想是在执行任务之前，先复制当前线程threadLocals和inheritableThreadLocals中的数据存储在临时变量中，然后在线程池中线程执行具体任务前，用临时变量数据覆盖当前线程的threadLocals和inheritableThreadLocals变量。执行完将threadLocals和inheritableThreadLocals数据全部删除（因为我们要确保线程池是无状态的，所以没有必要恢复，这里和阿里的TTL不同）。
+其核心思想是在执行任务之前，先复制当前线程threadLocals和inheritableThreadLocals中的数据存储在临时变量中，然后在线程池中线程执行具体任务前，用临时变量数据覆盖当前线程的threadLocals和inheritableThreadLocals变量。**执行完将threadLocals和inheritableThreadLocals数据全部删除（因为我们要确保线程池是无状态的，所以没有必要恢复，这里和阿里的TTL不同）**。
 
 这样就可以在线程池中共享数据。解决线程池调用无法共享数据的问题。
 
@@ -381,4 +381,4 @@ compareSafe cost:5
 compareTTL cost:2265
 ```
 
-SafeThreadPoolExecutorForThreadLocal 线程池的性能在ThreadLocal 越多的情况下，性能越高，在ThreadLocal量级为10000的场景下，性能比阿里的TransmittableThreadLocal快100多倍，而且随着运行时间的累加，SafeThreadPoolExecutorForThreadLocal性能提升越来越高。
+SafeThreadPoolExecutorForThreadLocal 线程池的性能在ThreadLocal 越多的情况下，性能越高，在ThreadLocal量级为10000的场景下，**性能比阿里的TransmittableThreadLocal快100多倍**，而且随着运行时间的累加，SafeThreadPoolExecutorForThreadLocal性能提升越来越高。
