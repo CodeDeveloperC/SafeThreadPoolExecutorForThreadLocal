@@ -1,8 +1,8 @@
 
 import com.alibaba.ttl.TransmittableThreadLocal;
+import com.alibaba.ttl.threadpool.TtlExecutors;
 
 import javax.validation.constraints.NotNull;
-import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
@@ -93,11 +93,17 @@ public class SafeThreadPoolExecutorForThreadLocal extends ThreadPoolExecutor {
         return future;
     }
 
-    public static void main(String[] args) throws ExecutionException, InterruptedException, IOException {
+    public static void main(String[] args) throws Exception {
+        // test1();
+        // test2();
+        compare();
+    }
+
+    public static void test1() throws Exception {
         ThreadLocal<String> context = new ThreadLocal<>();
         ThreadLocal<String> contextI = new InheritableThreadLocal<>();
         ThreadLocal<String> contextT = new TransmittableThreadLocal<>();
-        SafeThreadPoolExecutorForThreadLocal executor = SafeThreadPoolExecutorForThreadLocal.newFixedThreadPool(1);
+        ExecutorService executor = SafeThreadPoolExecutorForThreadLocal.newFixedThreadPool(1);
         byte[] bytes = Files.readAllBytes(Paths.get("/Users/cheteng/chen/project/mycode/idea/mylearning/leetcode/src/main/java/com/example/leetcode/utils/SafeThreadPoolExecutorForThreadLocal.java"));
         String content = new String(bytes);
         for (int j = 0; j < 10000; j++) {
@@ -124,6 +130,104 @@ public class SafeThreadPoolExecutorForThreadLocal extends ThreadPoolExecutor {
         long end = System.currentTimeMillis();
         System.out.println("cost:" + (end - start));
         executor.shutdown();
+    }
+
+    public static void test2() throws Exception {
+        ThreadLocal<String> context = new ThreadLocal<>();
+        ThreadLocal<String> contextI = new InheritableThreadLocal<>();
+        ThreadLocal<String> contextT = new TransmittableThreadLocal<>();
+        ExecutorService executor = Executors.newFixedThreadPool(1);
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < 10; i++) {
+            // context.set("ThreadLocal-from-main:" + i);
+            contextI.set("ThreadLocal-from-main:" + i);
+            // contextT.set("ThreadLocal-from-main:" + i);
+            Future<Integer> submit = executor.submit(() -> {
+                System.out.println("contextI = " + contextT.get());
+                return 1;
+            });
+            submit.get();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("cost:" + (end - start));
+        executor.shutdown();
+    }
+
+    public static void test3() throws Exception {
+
+        ThreadLocal<String> context = new ThreadLocal<>();
+        ThreadLocal<String> contextI = new InheritableThreadLocal<>();
+        ThreadLocal<String> contextT = new TransmittableThreadLocal<>();
+        ExecutorService executor = Executors.newFixedThreadPool(1);
+        executor = TtlExecutors.getTtlExecutorService(executor);
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < 10; i++) {
+            // context.set("ThreadLocal-from-main:" + i);
+            // contextI.set("ThreadLocal-from-main:" + i);
+            contextT.set("ThreadLocal-from-main:" + i);
+            Future<Integer> submit = executor.submit(() -> {
+                System.out.println("context value = " + contextT.get());
+                return 1;
+            });
+            submit.get();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("cost:" + (end - start));
+        executor.shutdown();
+    }
+
+    public static void compare() throws Exception {
+        for (int j = 0; j < 1000; j++) {
+            ThreadLocal<String> context2 = new TransmittableThreadLocal<>();
+            context2.set("ThreadLocal-from-main-inner:" + j);
+            // byte[] bytes = Files.readAllBytes(Paths.get("/Users/cheteng/chen/project/mycode/idea/mylearning/leetcode/src/main/java/com/example/leetcode/utils/SafeThreadPoolExecutorForThreadLocal.java"));
+            // String content = new String(bytes);
+            // ThreadLocal<Map<String, Object>> context3 = new TransmittableThreadLocal<>();
+            // Map<String, Object> data = new HashMap<>();
+            // data.put("field1", new Object());
+            // data.put("field2", new Object());
+            // data.put("field3", content);
+            // context3.set(data);
+        }
+        int rounds = 10000;
+        for (int i = 0; i < 10; i++) {
+            System.out.println("-------------" + i + "------------");
+            compareSafe(rounds);
+            compareTTL(rounds);
+        }
+    }
+
+    public static void compareTTL(int rounds) throws Exception {
+        ThreadLocal<String> contextT = new TransmittableThreadLocal<>();
+        ExecutorService executor = Executors.newFixedThreadPool(1);
+        executor = TtlExecutors.getTtlExecutorService(executor);
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < rounds; i++) {
+            contextT.set("ThreadLocal-from-main:" + i);
+            Future<String> submit = executor.submit(() -> {
+                // System.out.println("context value = " + contextT.get());
+                return contextT.get();
+            });
+            submit.get();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("compareTTL cost:" + (end - start));
+    }
+
+    public static void compareSafe(int rounds) throws Exception {
+        ThreadLocal<String> context = new ThreadLocal<>();
+        ExecutorService executor = SafeThreadPoolExecutorForThreadLocal.newFixedThreadPool(1);
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < rounds; i++) {
+            context.set("ThreadLocal-from-main:" + i);
+            Future<String> submit = executor.submit(() -> {
+                // System.out.println("contextI = " + context.get());
+                return context.get();
+            });
+            submit.get();
+        }
+        long end = System.currentTimeMillis();
+        System.out.println("compareSafe cost:" + (end - start));
     }
 
 }
